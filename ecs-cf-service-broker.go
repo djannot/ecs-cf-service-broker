@@ -21,6 +21,7 @@ type Ecs struct {
   User string
   Password string
   IP string
+  Endpoint string
   Namespace string
 }
 
@@ -100,6 +101,7 @@ func main() {
   userPtr := flag.String("User", "", "The ECS namespace admin user")
   passwordPtr := flag.String("Password", "", "The ECS namespace admin password")
   ipPtr := flag.String("IP", "", "The ECS IP address")
+  endpointPtr := flag.String("Endpoint", "", "The ECS S3 endpoint")
   namespacePtr := flag.String("Namespace", "", "The ECS namespace")
   brokerUrlPtr := flag.String("BrokerUrl", "", "The URL of the broker")
   brokerUserPtr := flag.String("BrokerUser", "", "The broker user")
@@ -111,6 +113,7 @@ func main() {
     Password: *passwordPtr,
     Namespace: *namespacePtr,
     IP: *ipPtr,
+    Endpoint: *endpointPtr,
   }
 
   broker = Broker{
@@ -272,8 +275,10 @@ type CreateSecretKey struct {
 }
 
 type Credentials struct {
-  User string `json:"user"`
+  AccessKey string `json:"access_key"`
   SecretKey string `json:"secret_key"`
+  Namespace string `json:"namespace"`
+  Endpoint string `json:"endpoint"`
 }
 
 type BindingResponse struct {
@@ -342,8 +347,10 @@ func Bind(w http.ResponseWriter, r *http.Request) *appError {
   }
 
   credentials := Credentials{
-    User: "cf-" + instanceId,
+    AccessKey: "cf-" + instanceId,
     SecretKey: secretKey,
+    Namespace: ecs.Namespace,
+    Endpoint: ecs.Endpoint,
   }
 
   bindingResponse := BindingResponse{
