@@ -11,6 +11,7 @@ import (
   "log"
   "net/http"
 
+  "github.com/nabeken/negroni-auth"
   "github.com/codegangsta/negroni"
   "github.com/gorilla/mux"
   "github.com/unrolled/render"
@@ -23,8 +24,14 @@ type Ecs struct {
   Namespace string
 }
 
+type Broker struct {
+  User string
+  Password string
+  Url string
+}
+
 var ecs Ecs
-var brokerUrl string
+var broker Broker
 var rendering *render.Render
 
 func ecsRequest(ecs Ecs, method string, path string, body io.Reader, headers map[string][]string) (*http.Response, error) {
@@ -95,6 +102,8 @@ func main() {
   ipPtr := flag.String("IP", "", "The ECS IP address")
   namespacePtr := flag.String("Namespace", "", "The ECS namespace")
   brokerUrlPtr := flag.String("BrokerUrl", "", "The URL of the broker")
+  brokerUserPtr := flag.String("BrokerUser", "", "The broker user")
+  brokerPasswordPtr := flag.String("BrokerPassword", "", "The broker password")
   flag.Parse()
 
   ecs = Ecs{
@@ -104,7 +113,11 @@ func main() {
     IP: *ipPtr,
   }
 
-  brokerUrl = *brokerUrlPtr
+  broker = Broker{
+    User: *brokerUserPtr,
+    Password: *brokerPasswordPtr,
+    Url: *brokerUrlPtr,
+  }
 
   port := "80"
 
@@ -120,7 +133,7 @@ func main() {
   router.Handle("/v2/service_instances/{instanceId}", appHandler(Deprovision)).Methods("DELETE")
   router.PathPrefix("/app/").Handler(http.StripPrefix("/app/", http.FileServer(http.Dir("app"))))
 
-	n := negroni.Classic()
+	n := negroni.New(auth.Basic(broker.User, broker.Password))
 	n.UseHandler(RecoverHandler(router))
 	n.Run(":" + port)
 
@@ -153,7 +166,7 @@ type Catalog struct {
 
 func GetCatalog(w http.ResponseWriter, r *http.Request) *appError {
   metadata := Metadata{
-    ImageUrl: brokerUrl + "/app/images/ecs.png",
+    ImageUrl: broker.Url + "/app/images/ecs.png",
   }
 
   plans := []Plan{
