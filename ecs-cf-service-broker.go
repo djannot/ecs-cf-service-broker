@@ -202,6 +202,10 @@ type CreateUserRequest struct {
   Tags []string `json:"tags"`
 }
 
+type ProvisionResponse struct {
+  DashboardUrl string `json:"dashboard_url"`
+}
+
 func Provision(w http.ResponseWriter, r *http.Request) *appError {
   vars := mux.Vars(r)
   instanceId := vars["instanceId"]
@@ -240,7 +244,11 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
     fmt.Println(resp)
   }
 
-	rendering.JSON(w, http.StatusCreated, "{}")
+  provisionResponse := ProvisionResponse{
+    DashboardUrl: "http://10.64.231.196",
+  }
+
+	rendering.JSON(w, http.StatusCreated, provisionResponse)
 
 	return nil
 }
@@ -383,7 +391,7 @@ func Unbind(w http.ResponseWriter, r *http.Request) *appError {
     }
   }
 
-	rendering.JSON(w, http.StatusOK, "{}")
+	rendering.JSON(w, http.StatusOK, map[string]string{})
 
 	return nil
 }
@@ -415,7 +423,7 @@ func Deprovision(w http.ResponseWriter, r *http.Request) *appError {
     fmt.Println(err)
   }
 
-	rendering.JSON(w, http.StatusOK, "{}")
+	rendering.JSON(w, http.StatusOK, map[string]string{})
 
 	return nil
 }
