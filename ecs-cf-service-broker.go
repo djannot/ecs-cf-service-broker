@@ -92,7 +92,7 @@ func RecoverHandler(next http.Handler) http.Handler {
 func main() {
   userPtr := flag.String("User", "", "The ECS namespace admin user")
   passwordPtr := flag.String("Password", "", "The ECS namespace admin password")
-  ipPtr := flag.String("Endpoint", "", "The ECS IP address")
+  ipPtr := flag.String("IP", "", "The ECS IP address")
   namespacePtr := flag.String("Namespace", "", "The ECS namespace")
   brokerUrlPtr := flag.String("BrokerUrl", "", "The URL of the broker")
   flag.Parse()
