@@ -62,9 +62,7 @@ func ecsRequest(ecs Ecs, method string, path string, body io.Reader, headers map
 type appError struct {
 	err error
 	status int
-	json string
-	template string
-	binding interface{}
+	json map[string]string
 }
 
 type appHandler func(http.ResponseWriter, *http.Request) *appError
@@ -73,11 +71,7 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   if e := fn(w, r); e != nil {
 		log.Print(e.err)
 		if e.status != 0 {
-			if e.json != "" {
-				rendering.JSON(w, e.status, e.json)
-			} else {
-				rendering.HTML(w, e.status, e.template, e.binding)
-			}
+      rendering.JSON(w, e.status, e.json)
 		}
   }
 }
@@ -110,7 +104,7 @@ func main() {
     Endpoint: *endpointPtr,
   }
 
-  port := "8080"
+  port := "80"
 
   // See http://godoc.org/github.com/unrolled/render
   rendering = render.New()
@@ -125,7 +119,6 @@ func main() {
 
 	n := negroni.Classic()
 	n.UseHandler(RecoverHandler(router))
-	//http.ListenAndServeTLS(":" + port, "fe1b47ba5bcb246b.crt", "connectspeople.com.key", n)
 	n.Run(":" + port)
 
 	fmt.Printf("Listening on port " + port)
@@ -213,7 +206,7 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
   decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&provisioningRequest)
 	if(err != nil) {
-		fmt.Println(err)
+    return &appError{err: err, status: 422, json: map[string]string{}}
 	}
 
   createUserRequest := CreateUserRequest{
@@ -229,7 +222,7 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
 
   b, err := json.Marshal(createUserRequest)
   if(err != nil) {
-		fmt.Println(err)
+    return &appError{err: err, status: 422, json: map[string]string{}}
 	}
 
   headers := make(map[string][]string)
@@ -237,11 +230,10 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
 
   resp, err := ecsRequest(ecs, "POST", "/object/users.json", bytes.NewReader(b), headers)
   if err != nil {
-    fmt.Println(err)
+    return &appError{err: err, status: 422, json: map[string]string{}}
   }
   if resp.StatusCode != 201 {
-    fmt.Println("User can't be created")
-    fmt.Println(resp)
+    return &appError{err: errors.New("User can't be created"), status: 422, json: map[string]string{}}
   }
 
   provisionResponse := ProvisionResponse{
@@ -283,19 +275,18 @@ type NewSecretKey struct {
 func Bind(w http.ResponseWriter, r *http.Request) *appError {
   vars := mux.Vars(r)
   instanceId := vars["instanceId"]
-  //bindingId := vars["bindingId"]
   var bindingRequest BindingRequest
   decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(&bindingRequest)
 	if(err != nil) {
-		fmt.Println(err)
+    return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
 	}
 
   secretKey := ""
 
   resp, err := ecsRequest(ecs, "GET", "/object/user-secret-keys/cf-" + instanceId + ".json", nil, make(map[string][]string))
   if err != nil {
-    fmt.Println(err)
+    return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   }
   if resp.StatusCode == 200 {
     var existingSecretKey ExistingSecretKey
@@ -313,7 +304,7 @@ func Bind(w http.ResponseWriter, r *http.Request) *appError {
 
     b, err := json.Marshal(createSecretKey)
     if(err != nil) {
-  		fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   	}
 
     headers := make(map[string][]string)
@@ -321,17 +312,17 @@ func Bind(w http.ResponseWriter, r *http.Request) *appError {
 
     resp, err = ecsRequest(ecs, "POST", "/object/user-secret-keys/cf-" + instanceId + ".json", bytes.NewReader(b), headers)
     if err != nil {
-      fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
     }
     var newSecretKey NewSecretKey
     decoder = json.NewDecoder(resp.Body)
   	err = decoder.Decode(&newSecretKey)
   	if(err != nil) {
-  		fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   	}
     secretKey = newSecretKey.SecretKey
   } else {
-    fmt.Println("Can't get secret key")
+    return &appError{err: errors.New("Can't get secret key"), status: http.StatusInternalServerError, json: map[string]string{}}
   }
 
   credentials := Credentials{
@@ -356,11 +347,10 @@ type DeleteSecretKey struct {
 func Unbind(w http.ResponseWriter, r *http.Request) *appError {
   vars := mux.Vars(r)
   instanceId := vars["instanceId"]
-  //bindingId := vars["bindingId"]
 
   resp, err := ecsRequest(ecs, "GET", "/object/user-secret-keys/cf-" + instanceId + ".json", nil, make(map[string][]string))
   if err != nil {
-    fmt.Println(err)
+    return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   }
 
   if resp.StatusCode == 200 {
@@ -368,7 +358,7 @@ func Unbind(w http.ResponseWriter, r *http.Request) *appError {
     decoder := json.NewDecoder(resp.Body)
   	err := decoder.Decode(&existingSecretKey)
   	if(err != nil) {
-  		fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   	}
     secretKey := existingSecretKey.SecretKey
 
@@ -379,7 +369,7 @@ func Unbind(w http.ResponseWriter, r *http.Request) *appError {
 
     b, err := json.Marshal(deleteSecretKey)
     if(err != nil) {
-  		fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   	}
 
     headers := make(map[string][]string)
@@ -387,7 +377,7 @@ func Unbind(w http.ResponseWriter, r *http.Request) *appError {
 
     resp, err = ecsRequest(ecs, "POST", "/object/user-secret-keys/cf-" + instanceId + "/deactivate.json", bytes.NewReader(b), headers)
     if err != nil {
-      fmt.Println(err)
+      return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
     }
   }
 
@@ -412,7 +402,7 @@ func Deprovision(w http.ResponseWriter, r *http.Request) *appError {
 
   b, err := json.Marshal(deleteUser)
   if(err != nil) {
-    fmt.Println(err)
+    return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   }
 
   headers := make(map[string][]string)
@@ -420,7 +410,7 @@ func Deprovision(w http.ResponseWriter, r *http.Request) *appError {
 
   _, err = ecsRequest(ecs, "POST", "/object/users/deactivate.json", bytes.NewReader(b), headers)
   if err != nil {
-    fmt.Println(err)
+    return &appError{err: err, status: http.StatusInternalServerError, json: map[string]string{}}
   }
 
 	rendering.JSON(w, http.StatusOK, map[string]string{})
