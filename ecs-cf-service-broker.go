@@ -117,7 +117,7 @@ func main() {
 
   // See http://www.gorillatoolkit.org/pkg/mux
   router := mux.NewRouter()
-  router.Handle("/v2/catalog", appHandler(Catalog)).Methods("GET")
+  router.Handle("/v2/catalog", appHandler(GetCatalog)).Methods("GET")
   router.Handle("/v2/service_instances/{instanceId}", appHandler(Provision)).Methods("PUT")
   router.Handle("/v2/service_instances/{instanceId}/service_bindings/{bindingId}", appHandler(Bind)).Methods("PUT")
   router.Handle("/v2/service_instances/{instanceId}/service_bindings/{bindingId}", appHandler(Unbind)).Methods("DELETE")
@@ -142,7 +142,7 @@ type Plan struct {
   Free bool `json:"free"`
 }
 
-type Services struct {
+type Service struct {
 	Id string `json:"id"`
   Name string `json:"name"`
   Description string `json:"description"`
@@ -151,7 +151,11 @@ type Services struct {
   Plans []Plan `json:"plans"`
 }
 
-func Catalog(w http.ResponseWriter, r *http.Request) *appError {
+type Catalog struct {
+  Services []Service `json:"services"`
+}
+
+func GetCatalog(w http.ResponseWriter, r *http.Request) *appError {
   metadata := Metadata{
     ImageUrl: "http://www.emc.com/images/products/header-image-icon-ecs.png",
   }
@@ -165,16 +169,22 @@ func Catalog(w http.ResponseWriter, r *http.Request) *appError {
     },
   }
 
-  services := Services{
-    Id: "ecscfservicebroker",
-    Name: "ecscfservicebroker",
-    Description: "ECS Service Broker",
-    Bindable: true,
-    Metadata: metadata,
-    Plans: plans,
+  services := []Service{
+    Service {
+      Id: "ecscfservicebroker",
+      Name: "ecscfservicebroker",
+      Description: "ECS Service Broker",
+      Bindable: true,
+      Metadata: metadata,
+      Plans: plans,
+    },
   }
 
-	rendering.JSON(w, http.StatusOK, services)
+  catalog := Catalog{
+    Services: services,
+  }
+
+	rendering.JSON(w, http.StatusOK, catalog)
 
 	return nil
 }
