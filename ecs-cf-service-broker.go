@@ -10,7 +10,6 @@ import (
   "io"
   "log"
   "net/http"
-  "strings"
 
   "github.com/codegangsta/negroni"
   "github.com/gorilla/mux"
@@ -20,11 +19,12 @@ import (
 type Ecs struct {
   User string
   Password string
-  Endpoint string
+  IP string
   Namespace string
 }
 
 var ecs Ecs
+var brokerUrl string
 var rendering *render.Render
 
 func ecsRequest(ecs Ecs, method string, path string, body io.Reader, headers map[string][]string) (*http.Response, error) {
@@ -32,8 +32,7 @@ func ecsRequest(ecs Ecs, method string, path string, body io.Reader, headers map
     TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
   }
   httpClient := &http.Client{Transport: httpTransport}
-  endpoint := strings.TrimRight(ecs.Endpoint,"/")
-  reqLogin, err := http.NewRequest("GET", endpoint + "/login", nil)
+  reqLogin, err := http.NewRequest("GET", "https://" + ecs.IP + ":4443/login", nil)
   if err != nil {
     return nil, err
   }
@@ -46,7 +45,7 @@ func ecsRequest(ecs Ecs, method string, path string, body io.Reader, headers map
   if token == "" {
     return nil, errors.New("Login error")
   }
-  req, err := http.NewRequest(method, endpoint + path, body)
+  req, err := http.NewRequest(method, "https://" + ecs.IP + ":4443" + path, body)
   if err != nil {
     return nil, err
   }
@@ -93,16 +92,19 @@ func RecoverHandler(next http.Handler) http.Handler {
 func main() {
   userPtr := flag.String("User", "", "The ECS namespace admin user")
   passwordPtr := flag.String("Password", "", "The ECS namespace admin password")
-  endpointPtr := flag.String("Endpoint", "", "The ECS endpoint")
+  ipPtr := flag.String("Endpoint", "", "The ECS IP address")
   namespacePtr := flag.String("Namespace", "", "The ECS namespace")
+  brokerUrlPtr := flag.String("BrokerUrl", "", "The URL of the broker")
   flag.Parse()
 
   ecs = Ecs{
     User: *userPtr,
     Password: *passwordPtr,
     Namespace: *namespacePtr,
-    Endpoint: *endpointPtr,
+    IP: *ipPtr,
   }
+
+  brokerUrl = *brokerUrlPtr
 
   port := "80"
 
@@ -116,6 +118,7 @@ func main() {
   router.Handle("/v2/service_instances/{instanceId}/service_bindings/{bindingId}", appHandler(Bind)).Methods("PUT")
   router.Handle("/v2/service_instances/{instanceId}/service_bindings/{bindingId}", appHandler(Unbind)).Methods("DELETE")
   router.Handle("/v2/service_instances/{instanceId}", appHandler(Deprovision)).Methods("DELETE")
+  router.PathPrefix("/app/").Handler(http.StripPrefix("/app/", http.FileServer(http.Dir("app"))))
 
 	n := negroni.Classic()
 	n.UseHandler(RecoverHandler(router))
@@ -150,7 +153,7 @@ type Catalog struct {
 
 func GetCatalog(w http.ResponseWriter, r *http.Request) *appError {
   metadata := Metadata{
-    ImageUrl: "http://www.emc.com/images/products/header-image-icon-ecs.png",
+    ImageUrl: brokerUrl + "/app/images/ecs.png",
   }
 
   plans := []Plan{
@@ -237,7 +240,7 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
   }
 
   provisionResponse := ProvisionResponse{
-    DashboardUrl: "http://10.64.231.196",
+    DashboardUrl: "http://" + ecs.IP,
   }
 
 	rendering.JSON(w, http.StatusCreated, provisionResponse)
