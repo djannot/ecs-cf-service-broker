@@ -10,8 +10,8 @@ import (
   "io"
   "log"
   "net/http"
+  "strings"
 
-  "github.com/nabeken/negroni-auth"
   "github.com/codegangsta/negroni"
   "github.com/gorilla/mux"
   "github.com/unrolled/render"
@@ -83,7 +83,7 @@ func (fn appHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-func RecoverHandler(next http.Handler) http.Handler {
+func AuthAndRecoverHandler(next http.Handler) http.Handler {
   fn := func(w http.ResponseWriter, r *http.Request) {
     defer func() {
       if err := recover(); err != nil {
@@ -91,8 +91,12 @@ func RecoverHandler(next http.Handler) http.Handler {
         http.Error(w, http.StatusText(500), 500)
       }
     }()
-
-    next.ServeHTTP(w, r)
+    username, password, _ := r.BasicAuth()
+    if (strings.HasPrefix(r.URL.Path, "/app") || (username == broker.User && password == broker.Password)) {
+      next.ServeHTTP(w, r)
+    } else {
+      rendering.JSON(w, http.StatusUnauthorized, map[string]string{})
+    }
   }
 	return http.HandlerFunc(fn)
 }
@@ -136,8 +140,8 @@ func main() {
   router.Handle("/v2/service_instances/{instanceId}", appHandler(Deprovision)).Methods("DELETE")
   router.PathPrefix("/app/").Handler(http.StripPrefix("/app/", http.FileServer(http.Dir("app"))))
 
-	n := negroni.New(auth.Basic(broker.User, broker.Password))
-	n.UseHandler(RecoverHandler(router))
+	n := negroni.Classic()
+	n.UseHandler(AuthAndRecoverHandler(router))
 	n.Run(":" + port)
 
 	fmt.Printf("Listening on port " + port)
@@ -251,7 +255,7 @@ func Provision(w http.ResponseWriter, r *http.Request) *appError {
   if err != nil {
     return &appError{err: err, status: 422, json: map[string]string{}}
   }
-  if resp.StatusCode != 201 {
+  if resp.StatusCode != 200 {
     return &appError{err: errors.New("User can't be created"), status: 422, json: map[string]string{}}
   }
 
